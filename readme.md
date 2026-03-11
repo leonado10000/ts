@@ -29,3 +29,7 @@ celery -A tasks worker --loglevel=info --pool=solo
 ```
 uvicorn main:app --reload
 ```
+
+
+# Er Diagram
+![Er Diagram](./er_diagram.png)
