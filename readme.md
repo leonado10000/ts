@@ -1,17 +1,17 @@
-1. Environment Setup
+## 1. Environment Setup
 PowerShell
 
-# Create and activate virtual environment
+### Create and activate virtual environment
 python -m venv .venv
 .\.venv\Scripts\activate
 
-# Install from requirements file
+### Install from requirements file
 pip install -r requirements.txt
 
-# Download the spaCy NLP model
+### Download the spaCy NLP model
 python -m spacy download en_core_web_sm
 
-2. Execution (Run in 3 Terminals)
+## 2. Execution (Run in 3 Terminals)
 
 Terminal 1: Redis Broker (Docker)
 PowerShell
