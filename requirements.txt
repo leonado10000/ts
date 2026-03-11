@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+psycopg2-binary
+celery
+redis
+boto3
+moviepy==1.0.3
+faster-whisper
+jinja2
+python-dotenv
+spacy

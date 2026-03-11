@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Podcast Clipper</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 900px; margin: auto; padding: 30px; background: #f0f2f5; color: #333; }
+        .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .step-container { display: flex; justify-content: space-between; margin: 30px 0; }
+        .step { flex: 1; text-align: center; padding: 10px; border-bottom: 4px solid #e4e6eb; color: #8a8d91; transition: 0.3s; }
+        .step.active { border-color: #007bff; color: #007bff; font-weight: bold; }
+        .step.done { border-color: #28a745; color: #28a745; }
+        .log-box { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace; height: 180px; overflow-y: auto; margin-top: 15px; }
+        .clip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
+        .clip-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border: 1px solid #e4e6eb; }
+        video { width: 100%; border-radius: 6px; margin-top: 10px; background: black; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        
+        /* Log Colors */
+        .log-upload { color: #d4d4d4; }
+        .log-transcription { color: #569cd6; } 
+        .log-nlp { color: #ce9178; } 
+        .log-clipping { color: #b5cea8; }      
+        .log-error { color: #f44747; font-weight: bold; }
+        .log-success { color: #4caf50; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🎙️ Podcast Clip Extractor</h1>
+        <p>Upload a video to automatically extract up to 10 viral segments.</p>
+
+        <div class="step-container">
+            <div id="step-upload" class="step">1. Uploaded</div>
+            <div id="step-transcribe" class="step">2. Transcribing</div>
+            <div id="step-analyze" class="step">3. AI Analyzing</div>
+            <div id="step-clip" class="step">4. Creating Clips</div>
+        </div>
+
+        <input type="file" id="videoFile" accept="video/*" style="margin-bottom: 15px;">
+        <br>
+        <button onclick="startProcessing()" id="uploadBtn">Process Video</button>
+
+        <div class="log-box" id="log-box">> System ready. Waiting for upload...</div>
+    </div>
+
+    <div id="results" style="display:none; margin-top: 30px;">
+        <h2>✨ AI Generated Clips</h2>
+        <div id="clip-grid" class="clip-grid"></div>
+    </div>
+
+    <script>
+        let jobId = null;
+        let pollInterval = null;
+
+        async function startProcessing() {
+            const fileInput = document.getElementById('videoFile');
+            if (!fileInput.files[0]) return alert("Please select a file first!");
+
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('uploadBtn').innerText = "Processing...";
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            document.getElementById('log-box').innerHTML = "> Uploading to server... Please wait.";
+            
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                jobId = data.job_id;
+                
+                setStep('upload');
+                pollInterval = setInterval(pollStatus, 3000); // Poll every 3 seconds
+            } catch (err) {
+                document.getElementById('log-box').innerHTML = `<div class="log-error">❌ Upload failed: ${err.message}</div>`;
+            }
+        }
+
+        function setStep(step) {
+            const steps = ['upload', 'transcribe', 'analyze', 'clip'];
+            const currentIdx = steps.indexOf(step);
+            
+            steps.forEach((s, i) => {
+                const el = document.getElementById('step-' + s);
+                if (i < currentIdx) el.className = 'step done';
+                else if (i === currentIdx) el.className = 'step active';
+                else el.className = 'step';
+            });
+        }
+
+        async function pollStatus() {
+            if (!jobId) return;
+
+            try {
+                const res = await fetch('/status/' + jobId);
+                const data = await res.json();
+                const logBox = document.getElementById('log-box');
+
+                // 1. Render Logs Dynamically
+                logBox.innerHTML = data.logs.map(l => {
+                    let cssClass = "log-upload";
+                    if (l.stage.includes("Transcription")) cssClass = "log-transcription";
+                    if (l.stage.includes("NLP")) cssClass = "log-nlp";
+                    if (l.stage.includes("Clipping")) cssClass = "log-clipping";
+                    if (l.stage.includes("Success")) cssClass = "log-success";
+                    if (l.stage.includes("Error")) cssClass = "log-error";
+                    
+                    return `<div class="${cssClass}">[${l.stage}] ${l.message}</div>`;
+                }).join('');
+                logBox.scrollTop = logBox.scrollHeight; // Auto-scroll
+
+                // 2. Update UI Steps based on logs
+                if (data.logs.some(l => l.stage === 'Transcription')) setStep('transcribe');
+                if (data.logs.some(l => l.stage === 'NLP Analysis')) setStep('analyze');
+                if (data.logs.some(l => l.stage === 'Clipping')) setStep('clip');
+
+                // 3. Handle Completion
+                if (data.status === "completed") {
+                    clearInterval(pollInterval);
+                    setStep('clip'); // Mark final step active/done
+                    document.getElementById('step-clip').className = 'step done';
+                    document.getElementById('uploadBtn').innerText = "Done!";
+                    
+                    // Render the videos (Path logic: /storage/ + clips/filename.mp4)
+                    document.getElementById('results').style.display = 'block';
+                    document.getElementById('clip-grid').innerHTML = data.clips.map(c => `
+                        <div class="clip-card">
+                            <strong>${c.title}</strong>
+                            <video controls>
+                                <source src="/storage/${c.file_path}" type="video/mp4">
+                            </video>
+                            <a href="/storage/${c.file_path}" download>
+                                <button style="width:100%; margin-top:10px;">Download Clip</button>
+                            </a>
+                        </div>
+                    `).join('');
+                } 
+                // 4. Handle Failure
+                else if (data.status === "failed") {
+                    clearInterval(pollInterval);
+                    document.getElementById('uploadBtn').innerText = "Failed";
+                    document.getElementById('uploadBtn').disabled = false;
+                }
+
+            } catch (err) {
+                console.error("Polling error:", err);
+            }
+        }
+    </script>
+</body>
+</html>
